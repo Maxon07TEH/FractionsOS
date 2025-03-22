@@ -16,16 +16,29 @@ header_end:
 section .text
 global _start
 _start:
-    mov esp, stack_top  ; Инициализация стека
+    mov esp, stack_top
     extern kernel_main
+
+    ; Проверка Multiboot
+    call check_multiboot
     call kernel_main
+
     cli
-.hang:
+global hang  ; Делаем метку видимой
+hang:
     hlt
-    jmp .hang
+    jmp hang
+
+check_multiboot:
+    cmp eax, 0x36d76289
+    jne .no_multiboot
+    ret
+.no_multiboot:
+    mov al, '0'
+    jmp hang  ; Используем глобальную метку
 
 section .bss
 align 16
 stack_bottom:
-    resb 16384  ; 16 KiB стека
+    resb 16384
 stack_top:

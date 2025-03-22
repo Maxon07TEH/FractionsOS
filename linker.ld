@@ -16,4 +16,5 @@ SECTIONS {
         . += 16K;
         stack_top = .;
     }
+    /DISCARD/ : { *(.note*) }  /* Убраны лишние символы */
 }

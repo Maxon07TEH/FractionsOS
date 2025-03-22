@@ -43,10 +43,26 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+boot/
+  grub/
+    grub.cfg
+drivers/
+  vga.c
+  vga.h
+isodir/
+  boot/
+    grub/
+      grub.cfg
 kernel/
   x64/
     boot.asm
     main.c
+scripts/
+  clean.sh
+  compile.sh
+  make-iso.sh
+  run.sh
+createproject.sh
 linker.ld
 Makefile
 OSInfo.txt
@@ -55,11 +71,113 @@ OSInfo.txt
 <files>
 This section contains the contents of the repository's files.
 
+<file path="boot/grub/grub.cfg">
+set timeout=15
+set default=0
+
+menuentry "FractionsOS" {
+    multiboot2 /boot/FractionsOS.x64.bin
+    boot
+}
+</file>
+
+<file path="drivers/vga.c">
+#include "vga.h"
+
+static uint16_t* vga_buffer = (uint16_t*)0xB8000;
+static size_t vga_row = 0;
+static size_t vga_column = 0;
+static uint8_t vga_color = 0;
+
+void vga_set_color(uint8_t fg, uint8_t bg) {
+    vga_color = fg | (bg << 4);
+}
+
+void vga_initialize(void) {
+    vga_set_color(COLOR_LIGHT_GREY, COLOR_BLACK);
+    for(size_t y = 0; y < VGA_HEIGHT; y++) {
+        for(size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            vga_buffer[index] = (vga_color << 8) | ' ';
+        }
+    }
+}
+
+void vga_write_string(const char* data) {
+    while(*data != '\0') {
+        if(*data == '\n') {
+            vga_column = 0;
+            vga_row++;
+            data++;
+            continue;
+        }
+
+        if(vga_column >= VGA_WIDTH) {
+            vga_column = 0;
+            vga_row++;
+        }
+
+        const size_t index = vga_row * VGA_WIDTH + vga_column;
+        vga_buffer[index] = (vga_color << 8) | *data;
+
+        vga_column++;
+        data++;
+    }
+}
+</file>
+
+<file path="drivers/vga.h">
+#ifndef VGA_H
+#define VGA_H
+#include <stdint.h>
+#include <stddef.h>
+
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+
+enum vga_color {
+    COLOR_BLACK = 0,
+    COLOR_BLUE = 1,
+    COLOR_GREEN = 2,
+    COLOR_CYAN = 3,
+    COLOR_RED = 4,
+    COLOR_MAGENTA = 5,
+    COLOR_BROWN = 6,
+    COLOR_LIGHT_GREY = 7,
+    COLOR_DARK_GREY = 8,
+    COLOR_LIGHT_BLUE = 9,
+    COLOR_LIGHT_GREEN = 10,
+    COLOR_LIGHT_CYAN = 11,
+    COLOR_LIGHT_RED = 12,
+    COLOR_LIGHT_MAGENTA = 13,
+    COLOR_YELLOW = 14,
+    COLOR_WHITE = 15,
+};
+
+void vga_initialize(void);
+void vga_write_string(const char* data);
+void vga_set_color(uint8_t fg, uint8_t bg);
+
+#endif
+</file>
+
+<file path="isodir/boot/grub/grub.cfg">
+set timeout=15
+set default=0
+
+menuentry "FractionsOS" {
+    multiboot2 /boot/FractionsOS.x64.bin
+    boot
+}
+</file>
+
 <file path="kernel/x64/boot.asm">
+bits 32
 section .multiboot_header
+align 8
 header_start:
-    dd 0xe85250d6                ; Magic number
-    dd 0                         ; Architecture 0 (i386)
+    dd 0xe85250d6                ; Magic number (Multiboot 2)
+    dd 0                         ; Architecture (i386)
     dd header_end - header_start ; Header length
     dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) ; Checksum
 
@@ -68,17 +186,249 @@ header_start:
     dw 0    ; Flags
     dd 8    ; Size
 header_end:
+
+section .text
+global _start
+_start:
+    mov esp, stack_top
+    extern kernel_main
+
+    ; Проверка Multiboot
+    call check_multiboot
+    call kernel_main
+
+    cli
+global hang  ; Делаем метку видимой
+hang:
+    hlt
+    jmp hang
+
+check_multiboot:
+    cmp eax, 0x36d76289
+    jne .no_multiboot
+    ret
+.no_multiboot:
+    mov al, '0'
+    jmp hang  ; Используем глобальную метку
+
+section .bss
+align 16
+stack_bottom:
+    resb 16384
+stack_top:
 </file>
 
 <file path="kernel/x64/main.c">
-#include "drivers/vga.h"
+#include "../../drivers/vga.h"
 
+// Атрибут для запрета оптимизации
+__attribute__((optimize("O0"))) 
 void kernel_main(void) {
     vga_initialize();
-    vga_write_string("Kernel loaded successfully!\n");
-    
-    for(;;) __asm__("hlt");
+    vga_write_string("FractionsOS: OK\n");
+
+    // Бесконечный цикл с CLI и HLT
+    __asm__ volatile (
+        "cli\n"
+        "1: hlt\n"
+        "jmp 1b"
+    );
 }
+</file>
+
+<file path="scripts/clean.sh">
+#!/bin/bash
+
+rm -rf isodir
+rm -f *.bin *.iso
+rm -f kernel/x64/*.o drivers/*.o
+</file>
+
+<file path="scripts/compile.sh">
+#!/bin/bash
+
+ARCH=${1#-}
+OBJ_DIR="obj"
+
+mkdir -p kernel/x64/$OBJ_DIR drivers/$OBJ_DIR
+
+nasm -f elf32 -g -F dwarf -o kernel/x64/$OBJ_DIR/boot.o kernel/x64/boot.asm || exit 1
+gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -I./drivers -c kernel/x64/main.c -o kernel/x64/$OBJ_DIR/main.o || exit 1
+gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -c drivers/vga.c -o drivers/$OBJ_DIR/vga.o || exit 1
+
+ld -m elf_i386 -T linker.ld -nostdlib -z max-page-size=0x1000 -o FractionsOS.x64.bin \
+    kernel/x64/$OBJ_DIR/boot.o \
+    kernel/x64/$OBJ_DIR/main.o \
+    drivers/$OBJ_DIR/vga.o || exit 1
+</file>
+
+<file path="scripts/make-iso.sh">
+#!/bin/bash
+
+mkdir -p isodir/boot/grub
+cp FractionsOS.x64.bin isodir/boot/
+cp boot/grub/grub.cfg isodir/boot/grub/
+grub-mkrescue -o FractionsOS.iso isodir
+</file>
+
+<file path="scripts/run.sh">
+#!/bin/bash
+qemu-system-x86_64 -cdrom FractionsOS.iso -m 512M -no-reboot -d int -D qemu.log
+</file>
+
+<file path="createproject.sh">
+#!/bin/bash
+
+# Создаем недостающие директории
+mkdir -p drivers scripts boot/grub efi/boot
+
+# Драйвер VGA (drivers/vga.h)
+cat > drivers/vga.h << 'EOF'
+#ifndef VGA_H
+#define VGA_H
+
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+
+enum vga_color {
+    COLOR_BLACK = 0,
+    COLOR_BLUE = 1,
+    COLOR_GREEN = 2,
+    COLOR_CYAN = 3,
+    COLOR_RED = 4,
+    COLOR_MAGENTA = 5,
+    COLOR_BROWN = 6,
+    COLOR_LIGHT_GREY = 7,
+    COLOR_DARK_GREY = 8,
+    COLOR_LIGHT_BLUE = 9,
+    COLOR_LIGHT_GREEN = 10,
+    COLOR_LIGHT_CYAN = 11,
+    COLOR_LIGHT_RED = 12,
+    COLOR_LIGHT_MAGENTA = 13,
+    COLOR_YELLOW = 14,
+    COLOR_WHITE = 15,
+};
+
+void vga_initialize(void);
+void vga_write_string(const char* data);
+void vga_set_color(uint8_t fg, uint8_t bg);
+
+#endif
+EOF
+
+# Драйвер VGA (drivers/vga.c)
+cat > drivers/vga.c << 'EOF'
+#include "vga.h"
+#include <stdint.h>
+
+static uint16_t* vga_buffer = (uint16_t*)0xB8000;
+static size_t vga_row = 0;
+static size_t vga_column = 0;
+static uint8_t vga_color = 0;
+
+void vga_initialize(void) {
+    vga_set_color(COLOR_LIGHT_GREY, COLOR_BLACK);
+    for(size_t y = 0; y < VGA_HEIGHT; y++) {
+        for(size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            vga_buffer[index] = (vga_color << 8) | ' ';
+        }
+    }
+}
+
+void vga_set_color(uint8_t fg, uint8_t bg) {
+    vga_color = fg | (bg << 4);
+}
+
+void vga_write_string(const char* data) {
+    while(*data != '\0') {
+        if(vga_column >= VGA_WIDTH) {
+            vga_column = 0;
+            vga_row++;
+        }
+        
+        if(vga_row >= VGA_HEIGHT) {
+            vga_row = 0;
+        }
+
+        if(*data == '\n') {
+            vga_column = 0;
+            vga_row++;
+            data++;
+            continue;
+        }
+
+        const size_t index = vga_row * VGA_WIDTH + vga_column;
+        vga_buffer[index] = (vga_color << 8) | *data;
+
+        vga_column++;
+        data++;
+    }
+}
+EOF
+
+# Конфигурация GRUB (boot/grub/grub.cfg)
+cat > boot/grub/grub.cfg << 'EOF'
+set timeout=15
+set default=0
+
+menuentry "FractionsOS" {
+    multiboot2 /boot/FractionsOS.x64.bin
+    boot
+}
+EOF
+
+# Скрипт компиляции (scripts/compile.sh)
+cat > scripts/compile.sh << 'EOF'
+#!/bin/bash
+
+ARCH=$1
+nasm -f elf64 -o kernel/x64/boot.o kernel/x64/boot.asm
+gcc -ffreestanding -m64 -c kernel/x64/main.c -o kernel/x64/main.o
+gcc -ffreestanding -m64 -c drivers/vga.c -o drivers/vga.o
+ld -T linker.ld -nostdlib -o FractionsOS.x64.bin kernel/x64/boot.o kernel/x64/main.o drivers/vga.o
+EOF
+
+# Скрипт создания ISO (scripts/make-iso.sh)
+cat > scripts/make-iso.sh << 'EOF'
+#!/bin/bash
+
+mkdir -p isodir/boot/grub
+cp FractionsOS.x64.bin isodir/boot/
+cp boot/grub/grub.cfg isodir/boot/grub/
+grub-mkrescue -o FractionsOS.iso isodir
+EOF
+
+# Скрипт запуска (scripts/run.sh)
+cat > scripts/run.sh << 'EOF'
+#!/bin/bash
+
+ARCH=$1
+qemu-system-x86_64 -cdrom FractionsOS.iso -m 512M
+EOF
+
+# Скрипт очистки (scripts/clean.sh)
+cat > scripts/clean.sh << 'EOF'
+#!/bin/bash
+
+rm -rf isodir
+rm -f *.bin *.iso
+rm -f kernel/x64/*.o drivers/*.o
+EOF
+
+# Делаем скрипты исполняемыми
+chmod +x scripts/*.sh
+
+# Создаем базовую файловую систему FAT64 (пример)
+dd if=/dev/zero of=disk.img bs=1M count=64
+mkfs.fat -F 64 disk.img
+mkdir -p mnt
+sudo mount disk.img mnt
+sudo mkdir -p mnt/EFI/BOOT
+sudo umount mnt
+rmdir mnt
+
+echo "Структура проекта создана!"
 </file>
 
 <file path="linker.ld">
@@ -87,19 +437,20 @@ ENTRY(_start)
 SECTIONS {
     . = 1M;
     .text : ALIGN(4K) {
-        *(.multiboot)
+        *(.multiboot_header)
         *(.text)
     }
-    .rodata : ALIGN(4K) {
-        *(.rodata)
-    }
-    .data : ALIGN(4K) {
-        *(.data)
-    }
+    .rodata : ALIGN(4K) { *(.rodata) }
+    .data : ALIGN(4K) { *(.data) }
     .bss : ALIGN(4K) {
         *(COMMON)
         *(.bss)
+        . = ALIGN(16);
+        stack_bottom = .;
+        . += 16K;
+        stack_top = .;
     }
+    /DISCARD/ : { *(.note*) }  /* Убраны лишние символы */
 }
 </file>
 
@@ -111,16 +462,16 @@ ISO = FractionsOS.iso
 .PHONY: all clean iso run
 
 all:
-    @./scripts/compile.sh -$(ARCH)
+	@./scripts/compile.sh -$(ARCH)
 
 iso: $(TARGET)
-    @./scripts/make-iso.sh
+	@./scripts/make-iso.sh
 
 run:
-    @./scripts/run.sh $(ARCH)
+	@./scripts/run.sh $(ARCH)
 
 clean:
-    @./scripts/clean.sh
+	@./scripts/clean.sh
 </file>
 
 <file path="OSInfo.txt">
