@@ -1,0 +1,6 @@
+executable format - .pe
+disk mount - like Windows
+kernel type - Hybrid(micro-monolythic)
+bootloader - EFI-Grub(with multiboot2)
+base filesystem - Fat64
+OS name - FractionsOS
