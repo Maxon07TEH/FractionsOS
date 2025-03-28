@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-#define BMP_WIDTH  4
-#define BMP_HEIGHT 4
-
 struct multiboot_tag {
     uint32_t type;
     uint32_t size;
@@ -60,7 +57,7 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     // Очищаем экран (черный фон)
     clear_screen(0xFF000000); // ARGB: непрозрачный черный
 
-    static uint32_t bitmap4x4[] __attribute__((aligned(4))) = {
+    static uint32_t bitmap4x4[] /*__attribute__((aligned(4)))*/ = {
         0xFF000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF000000, 
         0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 
         0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFFFFFFFF, 
