@@ -43,12 +43,16 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-boot/
-  grub/
-    grub.cfg
 drivers/
-  vga.c
-  vga.h
+  x64/
+    Video/
+      vbe/
+        vbe.c
+        vbe.h
+      vga/
+        printk.c
+        vga.c
+        vga.h
 isodir/
   boot/
     grub/
@@ -60,18 +64,173 @@ kernel/
 scripts/
   clean.sh
   compile.sh
+  deploy-to-github.sh
   make-iso.sh
   run.sh
-createproject.sh
+src/
+  boot/
+    grub/
+      grub.cfg
+  drivers/
+    vga.c
+    vga.h
+  kernel/
+    x64/
+      boot.asm
+      main.c
+.gitignore
 linker.ld
 Makefile
-OSInfo.txt
+manage-structure.sh
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="boot/grub/grub.cfg">
+<file path="drivers/x64/Video/vbe/vbe.c">
+#include "vbe.h"
+
+static uint32_t *framebuffer;
+static uint32_t pitch;
+
+void nvidia_vbe_init(uint32_t width, uint32_t height, uint8_t bpp, void *fb_addr) {
+    framebuffer = (uint32_t *)fb_addr;
+    pitch = width * (bpp / 8);
+}
+
+void draw_pixel(uint32_t x, uint32_t y, uint32_t color) {
+    if (x < (pitch / 4) && y < (0x1000000 / pitch)) {
+        uint32_t *pixel = framebuffer + y * (pitch / 16) + x;
+        *pixel = color;
+    }
+}
+</file>
+
+<file path="drivers/x64/Video/vbe/vbe.h">
+// vbe.h
+#ifndef VBE_H
+#define VBE_H
+
+#include <stdint.h>
+
+void nvidia_vbe_init(uint32_t width, uint32_t height, uint8_t bpp, void *fb_addr);
+void draw_pixel(uint32_t x, uint32_t y, uint32_t color);
+
+#endif
+</file>
+
+<file path="drivers/x64/Video/vga/printk.c">
+#include "vga.h"
+#include <stdarg.h>
+
+void printk(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    
+    char buffer[256];
+    // Упрощённая реализация форматирования (без поддержки %d, %x и т.д.)
+    int i = 0;
+    while (*fmt && i < 255) {
+        if (*fmt == '%') {
+            fmt++;
+            if (*fmt == 's') {
+                const char *str = va_arg(args, const char *);
+                while (*str) buffer[i++] = *str++;
+            }
+            fmt++;
+        } else {
+            buffer[i++] = *fmt++;
+        }
+    }
+    buffer[i] = '\0';
+    
+    vga_write_string(buffer); // Исправлено на vga_write_string()
+    
+    va_end(args);
+}
+</file>
+
+<file path="drivers/x64/Video/vga/vga.c">
+#include "vga.h"
+
+static uint16_t* vga_buffer = (uint16_t*)0xB8000;
+static size_t vga_row = 0;
+static size_t vga_column = 0;
+static uint8_t vga_color = 0;
+
+void vga_set_color(uint8_t fg, uint8_t bg) {
+    vga_color = fg | (bg << 4);
+}
+
+void vga_init(void) {
+    vga_set_color(COLOR_LIGHT_GREY, COLOR_BLACK);
+    for(size_t y = 0; y < VGA_HEIGHT; y++) {
+        for(size_t x = 0; x < VGA_WIDTH; x++) {
+            const size_t index = y * VGA_WIDTH + x;
+            vga_buffer[index] = (vga_color << 8) | ' ';
+        }
+    }
+}
+
+void vga_write_string(const char* data) {
+    while(*data != '\0') {
+        if(*data == '\n') {
+            vga_column = 0;
+            vga_row++;
+            data++;
+            continue;
+        }
+
+        if(vga_column >= VGA_WIDTH) {
+            vga_column = 0;
+            vga_row++;
+        }
+
+        const size_t index = vga_row * VGA_WIDTH + vga_column;
+        vga_buffer[index] = (vga_color << 8) | *data;
+
+        vga_column++;
+        data++;
+    }
+}
+</file>
+
+<file path="drivers/x64/Video/vga/vga.h">
+#ifndef VGA_H
+#define VGA_H
+#include <stdint.h>
+#include <stddef.h>
+
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+
+enum vga_color {
+    COLOR_BLACK = 0,
+    COLOR_BLUE = 1,
+    COLOR_GREEN = 2,
+    COLOR_CYAN = 3,
+    COLOR_RED = 4,
+    COLOR_MAGENTA = 5,
+    COLOR_BROWN = 6,
+    COLOR_LIGHT_GREY = 7,
+    COLOR_DARK_GREY = 8,
+    COLOR_LIGHT_BLUE = 9,
+    COLOR_LIGHT_GREEN = 10,
+    COLOR_LIGHT_CYAN = 11,
+    COLOR_LIGHT_RED = 12,
+    COLOR_LIGHT_MAGENTA = 13,
+    COLOR_YELLOW = 14,
+    COLOR_WHITE = 15,
+};
+
+void vga_init(void);
+void vga_write_string(const char* data);
+void vga_set_color(uint8_t fg, uint8_t bg);
+
+#endif
+</file>
+
+<file path="src/boot/grub/grub.cfg">
 set timeout=15
 set default=0
 
@@ -81,7 +240,53 @@ menuentry "FractionsOS" {
 }
 </file>
 
-<file path="drivers/vga.c">
+<file path="scripts/clean.sh">
+#!/bin/bash
+
+rm -rf isodir
+rm -f *.bin *.iso
+rm -f kernel/x64/*.o drivers/*.o
+</file>
+
+<file path="scripts/deploy-to-github.sh">
+#!/bin/bash
+
+# Инициализация репозитория
+if [ ! -d ".git" ]; then
+    git init
+    echo "# FractionsOS" > README.md
+    git remote add origin git@github.com:YOUR-USERNAME/FractionsOS.git
+fi
+
+# Добавление файлов новой структуры
+git add .
+git commit -m "Project restructured: build system, src folder, scripts"
+
+# Принудительный пуш (замените main на вашу ветку)
+git branch -M main
+git push -f -u origin main
+
+echo "Project structure updated and pushed to GitHub!"
+</file>
+
+<file path="scripts/make-iso.sh">
+#!/bin/bash
+
+mkdir -p isodir/boot/grub
+cp build/bin/FractionsOS.x64.bin isodir/boot/
+cp src/boot/grub/grub.cfg isodir/boot/grub/
+grub-mkrescue -o build/iso/FractionsOS.iso isodir
+</file>
+
+<file path="scripts/run.sh">
+qemu-system-x86_64 -cdrom build/iso/FractionsOS.iso \
+  -m 2G \
+  -serial stdio \
+  -d int,cpu_reset \
+  -D qemu.log
+</file>
+
+<file path="src/drivers/vga.c">
 #include "vga.h"
 
 static uint16_t* vga_buffer = (uint16_t*)0xB8000;
@@ -126,7 +331,7 @@ void vga_write_string(const char* data) {
 }
 </file>
 
-<file path="drivers/vga.h">
+<file path="src/drivers/vga.h">
 #ifndef VGA_H
 #define VGA_H
 #include <stdint.h>
@@ -161,17 +366,7 @@ void vga_set_color(uint8_t fg, uint8_t bg);
 #endif
 </file>
 
-<file path="isodir/boot/grub/grub.cfg">
-set timeout=15
-set default=0
-
-menuentry "FractionsOS" {
-    multiboot2 /boot/FractionsOS.x64.bin
-    boot
-}
-</file>
-
-<file path="kernel/x64/boot.asm">
+<file path="src/kernel/x64/boot.asm">
 bits 32
 section .multiboot_header
 align 8
@@ -218,157 +413,127 @@ stack_bottom:
 stack_top:
 </file>
 
-<file path="kernel/x64/main.c">
-#include "../../drivers/vga.h"
-
-// Атрибут для запрета оптимизации
-__attribute__((optimize("O0"))) 
-void kernel_main(void) {
-    vga_initialize();
-    vga_write_string("FractionsOS: OK\n");
-
-    // Бесконечный цикл с CLI и HLT
-    __asm__ volatile (
-        "cli\n"
-        "1: hlt\n"
-        "jmp 1b"
-    );
-}
-</file>
-
-<file path="scripts/clean.sh">
-#!/bin/bash
-
-rm -rf isodir
-rm -f *.bin *.iso
-rm -f kernel/x64/*.o drivers/*.o
-</file>
-
-<file path="scripts/compile.sh">
-#!/bin/bash
-
-ARCH=${1#-}
-OBJ_DIR="obj"
-
-mkdir -p kernel/x64/$OBJ_DIR drivers/$OBJ_DIR
-
-nasm -f elf32 -g -F dwarf -o kernel/x64/$OBJ_DIR/boot.o kernel/x64/boot.asm || exit 1
-gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -I./drivers -c kernel/x64/main.c -o kernel/x64/$OBJ_DIR/main.o || exit 1
-gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -c drivers/vga.c -o drivers/$OBJ_DIR/vga.o || exit 1
-
-ld -m elf_i386 -T linker.ld -nostdlib -z max-page-size=0x1000 -o FractionsOS.x64.bin \
-    kernel/x64/$OBJ_DIR/boot.o \
-    kernel/x64/$OBJ_DIR/main.o \
-    drivers/$OBJ_DIR/vga.o || exit 1
-</file>
-
-<file path="scripts/make-iso.sh">
-#!/bin/bash
-
-mkdir -p isodir/boot/grub
-cp FractionsOS.x64.bin isodir/boot/
-cp boot/grub/grub.cfg isodir/boot/grub/
-grub-mkrescue -o FractionsOS.iso isodir
-</file>
-
-<file path="scripts/run.sh">
-#!/bin/bash
-qemu-system-x86_64 -cdrom FractionsOS.iso -m 512M -no-reboot -d int -D qemu.log
-</file>
-
-<file path="createproject.sh">
-#!/bin/bash
-
-# Создаем недостающие директории
-mkdir -p drivers scripts boot/grub efi/boot
-
-# Драйвер VGA (drivers/vga.h)
-cat > drivers/vga.h << 'EOF'
-#ifndef VGA_H
-#define VGA_H
-
-#define VGA_WIDTH 80
-#define VGA_HEIGHT 25
-
-enum vga_color {
-    COLOR_BLACK = 0,
-    COLOR_BLUE = 1,
-    COLOR_GREEN = 2,
-    COLOR_CYAN = 3,
-    COLOR_RED = 4,
-    COLOR_MAGENTA = 5,
-    COLOR_BROWN = 6,
-    COLOR_LIGHT_GREY = 7,
-    COLOR_DARK_GREY = 8,
-    COLOR_LIGHT_BLUE = 9,
-    COLOR_LIGHT_GREEN = 10,
-    COLOR_LIGHT_CYAN = 11,
-    COLOR_LIGHT_RED = 12,
-    COLOR_LIGHT_MAGENTA = 13,
-    COLOR_YELLOW = 14,
-    COLOR_WHITE = 15,
-};
-
-void vga_initialize(void);
-void vga_write_string(const char* data);
-void vga_set_color(uint8_t fg, uint8_t bg);
-
-#endif
-EOF
-
-# Драйвер VGA (drivers/vga.c)
-cat > drivers/vga.c << 'EOF'
-#include "vga.h"
+<file path="src/kernel/x64/main.c">
+#include "../../drivers/x64/Video/vbe/vbe.h"
 #include <stdint.h>
 
-static uint16_t* vga_buffer = (uint16_t*)0xB8000;
-static size_t vga_row = 0;
-static size_t vga_column = 0;
-static uint8_t vga_color = 0;
+struct multiboot_tag_framebuffer {
+    uint32_t type;
+    uint32_t size;
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_width;
+    uint32_t framebuffer_height;
+    uint32_t framebuffer_pitch;
+    uint8_t framebuffer_bpp;
+} __attribute__((packed));
 
-void vga_initialize(void) {
-    vga_set_color(COLOR_LIGHT_GREY, COLOR_BLACK);
-    for(size_t y = 0; y < VGA_HEIGHT; y++) {
-        for(size_t x = 0; x < VGA_WIDTH; x++) {
-            const size_t index = y * VGA_WIDTH + x;
-            vga_buffer[index] = (vga_color << 8) | ' ';
-        }
-    }
-}
+// ... остальная часть кода ...
 
-void vga_set_color(uint8_t fg, uint8_t bg) {
-    vga_color = fg | (bg << 4);
-}
+vbe_init_from_multiboot(
+    fb_tag->framebuffer_width,
+    fb_tag->framebuffer_height,
+    fb_tag->framebuffer_bpp,
+    fb_tag->framebuffer_pitch,
+    (void*)(uintptr_t)fb_tag->framebuffer_addr
+);
+</file>
 
-void vga_write_string(const char* data) {
-    while(*data != '\0') {
-        if(vga_column >= VGA_WIDTH) {
-            vga_column = 0;
-            vga_row++;
-        }
-        
-        if(vga_row >= VGA_HEIGHT) {
-            vga_row = 0;
-        }
+<file path=".gitignore">
+# Игнорируем все промежуточные файлы сборки
+build/
+*.o
+*.bin
+*.elf
+*.iso
+*.img
 
-        if(*data == '\n') {
-            vga_column = 0;
-            vga_row++;
-            data++;
-            continue;
-        }
+# Игнорируем временные файлы редакторов
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
 
-        const size_t index = vga_row * VGA_WIDTH + vga_column;
-        vga_buffer[index] = (vga_color << 8) | *data;
+# Игнорируем логи и отладочные файлы
+*.log
+qemu.log
 
-        vga_column++;
-        data++;
-    }
-}
+# Игнорируем сгенерированные файлы
+*.iso
+*.img
+*.
+
+# Игнорируем папки, созданные IDE или редакторами
+.vscode/
+.idea/
+*.project
+*.settings/
+*.cache/
+*.DS_Store
+
+# Игнорируем локальные конфигурации
+.env
+*.local
+
+# Игнорируем исполняемые файлы (если есть)
+FractionsOS
+FractionsOS.*
+</file>
+
+<file path="Makefile">
+ARCH ?= x64
+TARGET = FractionsOS.$(ARCH).bin
+ISO = FractionsOS.iso
+
+.PHONY: all clean iso run
+
+all:
+	@./scripts/compile.sh -$(ARCH)
+
+iso:
+	@./scripts/make-iso.sh
+
+run:
+	@./scripts/run.sh $(ARCH)
+
+clean:
+	@./scripts/clean.sh
+</file>
+
+<file path="manage-structure.sh">
+#!/bin/bash
+
+# Обновляем main.c
+cat > src/kernel/x64/main.c << 'EOF'
+#include "../../drivers/x64/Video/vbe/vbe.h"
+#include <stdint.h>
+
+struct multiboot_tag_framebuffer {
+    uint32_t type;
+    uint32_t size;
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_width;
+    uint32_t framebuffer_height;
+    uint32_t framebuffer_pitch;
+    uint8_t framebuffer_bpp;
+} __attribute__((packed));
+
+// ... остальная часть кода ...
+
+vbe_init_from_multiboot(
+    fb_tag->framebuffer_width,
+    fb_tag->framebuffer_height,
+    fb_tag->framebuffer_bpp,
+    fb_tag->framebuffer_pitch,
+    (void*)(uintptr_t)fb_tag->framebuffer_addr
+);
 EOF
 
-# Конфигурация GRUB (boot/grub/grub.cfg)
-cat > boot/grub/grub.cfg << 'EOF'
+# Пересобираем проект
+make clean && make all && make iso && make run
+</file>
+
+<file path="isodir/boot/grub/grub.cfg">
 set timeout=15
 set default=0
 
@@ -376,59 +541,145 @@ menuentry "FractionsOS" {
     multiboot2 /boot/FractionsOS.x64.bin
     boot
 }
-EOF
+</file>
 
-# Скрипт компиляции (scripts/compile.sh)
-cat > scripts/compile.sh << 'EOF'
+<file path="kernel/x64/boot.asm">
+bits 32
+section .multiboot_header
+align 8  ; Выравнивание всего заголовка
+
+header_start:
+    dd 0xe85250d6                ; Magic
+    dd 0                         ; Архитектура
+    dd header_end - header_start ; Длина
+    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) ; Контрольная сумма
+
+    ; Тег фреймбуфера (тип 5)
+    dw 5
+    dw 0 ; Убираем фиксированные настройки
+    dd 20
+    dd 0 ; Ширина
+    dd 0 ; Высота
+    dd 0 ; Глубина цвета
+    align 8
+
+    ; Конечный тег
+    dw 0
+    dw 0
+    dd 8
+header_end:
+
+section .text
+global _start
+extern kernel_main
+
+_start:
+    mov esp, stack_top
+
+    ; Передача параметров Multiboot2 в kernel_main
+    push ebx       ; Указатель на структуру Multiboot2
+    push eax       ; Magic number (0x36d76289)
+    call kernel_main
+    add esp, 8     ; Очистка стека
+    
+    cli
+hang:
+    hlt
+    jmp hang
+
+section .bss
+align 16
+stack_bottom:
+    resb 16384
+stack_top:
+</file>
+
+<file path="kernel/x64/main.c">
+#include "../../drivers/x64/Video/vbe/vbe.h"
+#include "../../drivers/x64/Video/vga/vga.h"
+#include <stdint.h>
+#include <stddef.h>
+
+struct multiboot_tag {
+    uint32_t type;
+    uint32_t size;
+};
+
+struct multiboot_tag_framebuffer {
+    uint32_t type;          // 8 (MULTIBOOT_TAG_TYPE_FRAMEBUFFER)
+    uint32_t size;
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_width;
+    uint32_t framebuffer_height;
+    uint8_t framebuffer_bpp;
+    uint8_t framebuffer_type; // 1 = RGB
+} __attribute__((packed));
+
+void kernel_main(uint32_t magic, void *mboot_info_ptr) {
+    if (magic != 0x36d76289) {
+        return;
+    }
+
+    struct multiboot_tag *tag = (struct multiboot_tag *)((uintptr_t)mboot_info_ptr + 8);
+    struct multiboot_tag_framebuffer *fb_tag = NULL;
+
+    while (tag->type != 0) {
+        if (tag->type == 8) { // MULTIBOOT_TAG_TYPE_FRAMEBUFFER
+            fb_tag = (struct multiboot_tag_framebuffer *)tag;
+            if (fb_tag->framebuffer_type == 1) { // RGB
+                break;
+            }
+        }
+        tag = (struct multiboot_tag *)((uintptr_t)tag + ((tag->size + 7) & ~7));
+    }
+
+    if (fb_tag == NULL) {
+        // Не удалось найти тег фреймбуфера
+        return;
+    }
+
+    nvidia_vbe_init(
+        fb_tag->framebuffer_width,
+        fb_tag->framebuffer_height,
+        fb_tag->framebuffer_bpp,
+        (void*)(uintptr_t)fb_tag->framebuffer_addr
+    );
+
+    // Рисуем красный квадрат
+    for (uint32_t y = 100; y < 200; y++) {
+        for (uint32_t x = 100; x < 200; x++) {
+            draw_pixel(x, y, 0xFFFF0000); // ARGB
+        }
+    }
+
+    // Инициализация VGA на всякий случай
+    //vga_init();
+
+    while (1) {
+        asm volatile("hlt");
+    }
+}
+</file>
+
+<file path="scripts/compile.sh">
 #!/bin/bash
 
-ARCH=$1
-nasm -f elf64 -o kernel/x64/boot.o kernel/x64/boot.asm
-gcc -ffreestanding -m64 -c kernel/x64/main.c -o kernel/x64/main.o
-gcc -ffreestanding -m64 -c drivers/vga.c -o drivers/vga.o
-ld -T linker.ld -nostdlib -o FractionsOS.x64.bin kernel/x64/boot.o kernel/x64/main.o drivers/vga.o
-EOF
+ARCH=${1#-}
+OBJ_DIR="build/obj"
+BIN_DIR="build/bin"
 
-# Скрипт создания ISO (scripts/make-iso.sh)
-cat > scripts/make-iso.sh << 'EOF'
-#!/bin/bash
+mkdir -p kernel/$ARCH/$OBJ_DIR $OBJ_DIR $BIN_DIR
 
-mkdir -p isodir/boot/grub
-cp FractionsOS.x64.bin isodir/boot/
-cp boot/grub/grub.cfg isodir/boot/grub/
-grub-mkrescue -o FractionsOS.iso isodir
-EOF
+nasm -f elf32 -g -F dwarf -o kernel/$ARCH/$OBJ_DIR/boot.o kernel/$ARCH/boot.asm || exit 1
+gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -I./drivers -O2 -Wall -Wextra -c kernel/$ARCH/main.c -o kernel/$ARCH/$OBJ_DIR/main.o || exit 1
+gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -O2 -c drivers/$ARCH/Video/vga/vga.c -o $OBJ_DIR/vga.o || exit 1
+gcc -m32 -ffreestanding -nostdlib -fno-pie -fno-stack-protector -O2 -c drivers/$ARCH/Video/vbe/vbe.c -o $OBJ_DIR/vbe.o || exit 1
 
-# Скрипт запуска (scripts/run.sh)
-cat > scripts/run.sh << 'EOF'
-#!/bin/bash
-
-ARCH=$1
-qemu-system-x86_64 -cdrom FractionsOS.iso -m 512M
-EOF
-
-# Скрипт очистки (scripts/clean.sh)
-cat > scripts/clean.sh << 'EOF'
-#!/bin/bash
-
-rm -rf isodir
-rm -f *.bin *.iso
-rm -f kernel/x64/*.o drivers/*.o
-EOF
-
-# Делаем скрипты исполняемыми
-chmod +x scripts/*.sh
-
-# Создаем базовую файловую систему FAT64 (пример)
-dd if=/dev/zero of=disk.img bs=1M count=64
-mkfs.fat -F 64 disk.img
-mkdir -p mnt
-sudo mount disk.img mnt
-sudo mkdir -p mnt/EFI/BOOT
-sudo umount mnt
-rmdir mnt
-
-echo "Структура проекта создана!"
+ld -m elf_i386 -T linker.ld -nostdlib -z max-page-size=0x1000 -o $BIN_DIR/FractionsOS.$ARCH.bin \
+    kernel/$ARCH/$OBJ_DIR/boot.o \
+    kernel/$ARCH/$OBJ_DIR/main.o \
+    $OBJ_DIR/vga.o \
+    $OBJ_DIR/vbe.o || exit 1
 </file>
 
 <file path="linker.ld">
@@ -445,42 +696,12 @@ SECTIONS {
     .bss : ALIGN(4K) {
         *(COMMON)
         *(.bss)
-        . = ALIGN(16);
         stack_bottom = .;
         . += 16K;
         stack_top = .;
     }
-    /DISCARD/ : { *(.note*) }  /* Убраны лишние символы */
+    /DISCARD/ : { *(.note*) }
 }
-</file>
-
-<file path="Makefile">
-ARCH ?= x64
-TARGET = FractionsOS.$(ARCH).bin
-ISO = FractionsOS.iso
-
-.PHONY: all clean iso run
-
-all:
-	@./scripts/compile.sh -$(ARCH)
-
-iso: $(TARGET)
-	@./scripts/make-iso.sh
-
-run:
-	@./scripts/run.sh $(ARCH)
-
-clean:
-	@./scripts/clean.sh
-</file>
-
-<file path="OSInfo.txt">
-executable format - .pe
-disk mount - like Windows
-kernel type - Hybrid(micro-monolythic)
-bootloader - EFI-Grub(with multiboot2)
-base filesystem - Fat64
-OS name - FractionsOS
 </file>
 
 </files>

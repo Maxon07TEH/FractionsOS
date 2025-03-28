@@ -7,7 +7,7 @@ ISO = FractionsOS.iso
 all:
 	@./scripts/compile.sh -$(ARCH)
 
-iso: $(TARGET)
+iso:
 	@./scripts/make-iso.sh
 
 run:
