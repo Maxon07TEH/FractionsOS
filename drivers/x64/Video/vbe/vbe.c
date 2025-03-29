@@ -68,10 +68,10 @@ void draw_rect(uint32_t x, uint32_t y, uint32_t rect_width, uint32_t rect_height
 
 
 void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint32_t *bitmap) {
-    if (!framebuffer || !bitmap) return; // Проверка, что буфер и данные существуют
+    //if (!framebuffer || !bitmap) return; // Проверка, что буфер и данные существуют
 
-    uint32_t max_x = pitch / 4;
-    uint32_t max_y = 0x1000000 / pitch;
+    uint32_t max_x = fb_width;
+    uint32_t max_y = fb_height;
 
     if (x >= max_x || y >= max_y) return; // Если начальные координаты за границей экрана, выходим
 

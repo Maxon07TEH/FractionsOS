@@ -24,7 +24,7 @@ header_start:
     dd 32                  ; размер тега в байтах
     dd 0                   ; framebuffer_addr (низкая часть; загрузчик заполнит или оставит 0, если использовать встроенные настройки)
     dd 0                   ; framebuffer_addr (верхняя часть)
-    dd 1024                ; framebuffer_width  (например, 1024)
+    dd 1366                ; framebuffer_width  (например, 1024)
     dd 768                 ; framebuffer_height (например, 768)
     dd 4                   ; framebuffer_pitch  (например, 1024 пикселей * 4 байта)
     db 32                  ; framebuffer_bpp      (32 бита)

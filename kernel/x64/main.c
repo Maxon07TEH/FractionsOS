@@ -1,6 +1,6 @@
 #include "../../drivers/x64/Video/vbe/vbe.h"
 #include "../../drivers/x64/Video/vga/vga.h"
-#include "../../src/images/headers/logoBW.h"
+#include "../../src/images/headers/wallpaper1.h"
 #include "../../src/images/headers/commandprompt.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -54,16 +54,16 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
         fb_tag->framebuffer_width,
         fb_tag->framebuffer_height,
         fb_tag->framebuffer_bpp,
-        fb_tag->framebuffer_pitch,  // из мульти
+        fb_tag->framebuffer_pitch, 
         (void*)(uintptr_t)fb_tag->framebuffer_addr
     );
     
 
     // Очищаем экран (черный фон)
-    clear_screen(0xFF000000); // ARGB: непрозрачный черный
+    //clear_screen(0xFF000000); // ARGB: непрозрачный черный
     
     //draw_bitmap(50, 50, 200, 200, logoBW);
-    draw_bitmap(0, 0, 200, 200, commandprompt);
+    draw_bitmap(0, 0, 1366, 768, wallpaper1);
 
     while (1) {
         asm volatile("hlt");
