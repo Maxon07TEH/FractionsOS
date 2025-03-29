@@ -12,13 +12,15 @@ struct multiboot_tag {
 };
 
 struct multiboot_tag_framebuffer {
-    uint32_t type;          // 8 (MULTIBOOT_TAG_TYPE_FRAMEBUFFER)
+    uint32_t type;                // 8 (MULTIBOOT_TAG_TYPE_FRAMEBUFFER)
     uint32_t size;
     uint64_t framebuffer_addr;
     uint32_t framebuffer_width;
     uint32_t framebuffer_height;
+    uint32_t framebuffer_pitch;   // Добавляем поле pitch
     uint8_t framebuffer_bpp;
-    uint8_t framebuffer_type; // 1 = RGB
+    uint8_t framebuffer_type;     // 1 = RGB
+    uint16_t reserved;            // Для выравнивания, если требуется
 } __attribute__((packed));
 
 void kernel_main(uint32_t magic, void *mboot_info_ptr) {
@@ -48,18 +50,19 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
         }
     }
 
-    // Инициализация VBE с полученными параметрами
     nvidia_vbe_init(
         fb_tag->framebuffer_width,
         fb_tag->framebuffer_height,
         fb_tag->framebuffer_bpp,
+        fb_tag->framebuffer_pitch,  // из мульти
         (void*)(uintptr_t)fb_tag->framebuffer_addr
     );
+    
 
     // Очищаем экран (черный фон)
     clear_screen(0xFF000000); // ARGB: непрозрачный черный
     
-    draw_bitmap(50, 50, 200, 200, logoBW);
+    //draw_bitmap(50, 50, 200, 200, logoBW);
     draw_bitmap(0, 0, 200, 200, commandprompt);
 
     while (1) {

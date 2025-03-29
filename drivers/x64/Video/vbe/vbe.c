@@ -11,20 +11,23 @@ static uint32_t pitch;
 static uint32_t fb_width, fb_height;
 static uint32_t fb_bpp;
 
-void nvidia_vbe_init(uint32_t width, uint32_t height, uint8_t bpp, void *fb_addr) {
+void nvidia_vbe_init(uint32_t width, uint32_t height, uint8_t bpp, uint32_t fb_pitch, void *fb_addr) {
     fb_width = width;
     fb_height = height;
     fb_bpp = bpp;
     framebuffer = (uint32_t *)fb_addr;
-    pitch = width * (bpp / 8);
+    pitch = fb_pitch;  // pitch в байтах, полученный из multiboot тега
 }
 
+
 void draw_pixel(uint32_t x, uint32_t y, uint32_t color) {
-    if (x < (pitch / 4) && y < (0x1000000 / pitch)) {
-        uint32_t *pixel = framebuffer + y * (pitch / 16) + x;
-        *pixel = color;
+    if (x < fb_width && y < fb_height) {
+        uint32_t line_pixels = fb_width / 4;  // для 32 бит: pitch / 4
+        framebuffer[y * line_pixels + x] = color;
     }
 }
+
+
 
 void clear_screen(uint32_t color) {
     for (uint32_t y = 0; y < fb_height; y++) {
@@ -63,6 +66,7 @@ void draw_rect(uint32_t x, uint32_t y, uint32_t rect_width, uint32_t rect_height
     }
 }
 
+
 void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint32_t *bitmap) {
     if (!framebuffer || !bitmap) return; // Проверка, что буфер и данные существуют
 
@@ -83,3 +87,23 @@ void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const 
         }
     }
 }
+/*
+
+
+void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint32_t *bitmap) {
+    if (!framebuffer || !bitmap) return;
+    
+    for (uint32_t j = 0; j < height; j++) {
+        uint32_t draw_y = y + j;
+        if (draw_y >= fb_height) break;
+        
+        for (uint32_t i = 0; i < width; i++) {
+            uint32_t draw_x = x + i;
+            if (draw_x >= fb_width) break;
+            
+            uint32_t color = bitmap[j * width + i];
+            draw_pixel(draw_x, draw_y, color);
+        }
+    }
+}
+*/
