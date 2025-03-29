@@ -1,5 +1,7 @@
 #include "../../drivers/x64/Video/vbe/vbe.h"
 #include "../../drivers/x64/Video/vga/vga.h"
+#include "../../src/images/headers/logoBW.h"
+#include "../../src/images/headers/commandprompt.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -56,15 +58,9 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
 
     // Очищаем экран (черный фон)
     clear_screen(0xFF000000); // ARGB: непрозрачный черный
-
-    static uint32_t bitmap4x4[] /*__attribute__((aligned(4)))*/ = {
-        0xFF000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF000000, 
-        0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 
-        0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF, 0xFFFFFFFF, 
-        0xFF000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF000000
-    };
     
-    draw_bitmap(50, 50, 4, 4, bitmap4x4);
+    draw_bitmap(50, 50, 200, 200, logoBW);
+    draw_bitmap(0, 0, 200, 200, commandprompt);
 
     while (1) {
         asm volatile("hlt");
