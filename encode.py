@@ -25,7 +25,7 @@ def convert_image_to_bitmap(image_path):
         f.write("#include <stdint.h>\n\n")
         f.write(f"#define {filename.upper()}_WIDTH {width}\n")
         f.write(f"#define {filename.upper()}_HEIGHT {height}\n\n")
-        f.write(f"static const uint32_t {filename}[] = {{\n")
+        f.write(f"static const uint64_t {filename}[] = {{\n")
 
         for y in range(height):
             f.write("    ")

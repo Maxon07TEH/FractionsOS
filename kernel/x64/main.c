@@ -2,9 +2,12 @@
 #include "../../drivers/x64/Video/vga/vga.h"
 #include "../../src/images/headers/wallpaper1.h"
 #include "../../src/images/headers/commandprompt.h"
+#include "../../src/modules/BinFont.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
+
+#define VideoMode 1 // 0 - VGA, 1 - VBE
 
 struct multiboot_tag {
     uint32_t type;
@@ -25,9 +28,14 @@ struct multiboot_tag_framebuffer {
 
 void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     if (magic != 0x36d76289) {
-        return;
+        vga_init();
+        vga_write_string("[Eroor] Wrong multuboot2 magic.\n");
+        while (1) {
+            asm volatile("hlt");
+        }
     }
-
+    
+    // важно капец
     struct multiboot_tag *tag = (struct multiboot_tag *)((uintptr_t)mboot_info_ptr + 8);
     struct multiboot_tag_framebuffer *fb_tag = NULL;
 
@@ -44,7 +52,7 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     if (fb_tag == NULL) {
         // Нет подходящего режима фреймбуфера, переходим в режим VGA
         vga_init();
-        vga_write_string("Error: no suitable video mode found. Falling back to VGA.\n");
+        vga_write_string("[Error] Wrong framebuffer. stopping code.\n");
         while (1) {
             asm volatile("hlt");
         }
@@ -64,6 +72,8 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     
     //draw_bitmap(50, 50, 200, 200, logoBW);
     draw_bitmap(0, 0, 1366, 768, wallpaper1);
+    draw_symbol(0, 0, 'A'); // Вместо "A" используем 'A'
+
 
     while (1) {
         asm volatile("hlt");

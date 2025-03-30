@@ -1,5 +1,8 @@
 #include "vbe.h"
 #include <stdint.h>
+#include <stddef.h>
+#include "../../../../src/modules/BinFont.h"
+#include "../../../../src/images/headers/placeholder.h"
 
 /* Реализация собственной функции для вычисления абсолютного значения */
 static inline int my_abs(int x) {
@@ -10,6 +13,7 @@ static uint32_t *framebuffer;
 static uint32_t pitch;
 static uint32_t fb_width, fb_height;
 static uint32_t fb_bpp;
+
 
 void nvidia_vbe_init(uint32_t width, uint32_t height, uint8_t bpp, uint32_t fb_pitch, void *fb_addr) {
     fb_width = width;
@@ -67,7 +71,7 @@ void draw_rect(uint32_t x, uint32_t y, uint32_t rect_width, uint32_t rect_height
 }
 
 
-void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint32_t *bitmap) {
+void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint64_t *bitmap) {
     //if (!framebuffer || !bitmap) return; // Проверка, что буфер и данные существуют
 
     uint32_t max_x = fb_width;
@@ -87,23 +91,27 @@ void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const 
         }
     }
 }
-/*
 
+void draw_symbol(char c, uint32_t x, uint32_t y) {
+    if (c < 0 || c >= 128) return; // Проверка допустимых символов
 
-void draw_bitmap(uint32_t x, uint32_t y, uint32_t width, uint32_t height, const uint32_t *bitmap) {
-    if (!framebuffer || !bitmap) return;
-    
-    for (uint32_t j = 0; j < height; j++) {
-        uint32_t draw_y = y + j;
-        if (draw_y >= fb_height) break;
-        
-        for (uint32_t i = 0; i < width; i++) {
-            uint32_t draw_x = x + i;
-            if (draw_x >= fb_width) break;
-            
-            uint32_t color = bitmap[j * width + i];
-            draw_pixel(draw_x, draw_y, color);
+    const uint32_t *bitmap = font_bitmaps[(uint8_t)c];
+    if (!bitmap) return; // Проверяем, что битмап существует
+
+    uint32_t max_x = screen_width;
+    uint32_t max_y = screen_height;
+
+    for (uint32_t row = 0; row < FONT_HEIGHT; row++) {
+        for (uint32_t col = 0; col < FONT_WIDTH; col++) {
+            uint32_t draw_x = x + col;
+            uint32_t draw_y = y + row;
+
+            if (draw_x < max_x && draw_y < max_y) {
+                uint32_t color = bitmap[row * FONT_WIDTH + col];
+                if (color != 0xFF000000) { // Пропускаем фон
+                    draw_pixel(draw_x, draw_y, color);
+                }
+            }
         }
     }
 }
-*/
