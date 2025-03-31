@@ -37,3 +37,4 @@ qemu.log
 # Игнорируем исполняемые файлы (если есть)
 FractionsOS
 FractionsOS.*
+qemu.log

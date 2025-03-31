@@ -1,7 +1,7 @@
 #include "../../drivers/x64/Video/vbe/vbe.h"
 #include "../../drivers/x64/Video/vga/vga.h"
-#include "../../src/images/headers/wallpaper1.h"
-#include "../../src/images/headers/commandprompt.h"
+#include "../../src/images/headers/wallpaper1.h"    // Определяет WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1
+#include "../../src/images/headers/commandprompt.h" // Для примера
 #include "../../src/modules/BinFont.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -57,20 +57,18 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
         (void*)(uintptr_t)fb_tag->framebuffer_addr
     );
     
-    // Создаём два слоя: слой 0 для фонового изображения и слой 1 для текста.
-    create_layer(0);
-    create_layer(1);
+    // Используем экспортированные fb_width и fb_height из vbe.h
+    create_layer_ex(0, fb_width, fb_height, 0, 0);
+    create_layer_ex(1, fb_width, fb_height, 0, 0);
     
-    // Рисуем обои (фон) на слое 0:
-    draw_bitmap_layer(0, 0, 0, 1366, 768, wallpaper1);
+    // Рисуем обои на слое 0:
+    draw_bitmap_layer(0, 0, 0, WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1);
     
-    // Очищаем слой 1 (текстовый) до прозрачного:
+    // Очищаем слой 1 до прозрачного цвета и рисуем символ 'A'
     clear_layer(1, 0x00000000);
-    
-    // Рисуем символ 'A' на слое 1 в позиции (50,50) белым цветом:
     draw_symbol(1, 50, 50, 'A', 0xFFFFFFFF);
     
-    // Композитим слои: итоговое изображение выводим в видеопамять.
+    // Композитим виртуальные слои и выводим итоговое изображение в видеопамять
     composite_layers();
     
     while (1) { asm volatile("hlt"); }
