@@ -11,10 +11,9 @@ SECTIONS {
     .bss : ALIGN(4K) {
         *(COMMON)
         *(.bss)
-        . = ALIGN(16);
         stack_bottom = .;
         . += 16K;
         stack_top = .;
     }
-    /DISCARD/ : { *(.note*) }  /* Убраны лишние символы */
+    /DISCARD/ : { *(.note*) }
 }
