@@ -53,18 +53,32 @@ void draw_bitmap(uint32_t layer_index, uint32_t x, uint32_t y, uint32_t width, u
 void composite_layers(void) {
     for (uint32_t y = 0; y < fb_height; y++) {
         for (uint32_t x = 0; x < fb_width; x++) {
-            uint32_t final_pixel = 0xFF000000; // Начинаем с черного (полностью прозрачный)
+            uint32_t final_pixel = 0x00000000; // Начинаем с полностью прозрачного
+            uint8_t final_alpha = 0;
+
             for (uint8_t l = 0; l < MAX_LAYERS; l++) {
                 uint32_t pixel = layers[l][y * fb_width + x];
-                if ((pixel >> 24) != 0x00) { // Если пиксель не полностью прозрачный
-                    final_pixel = pixel; // Обновляем финальный пиксель
+                uint8_t alpha = pixel >> 24; // Получаем альфа-канал
+
+                if (alpha > 0) { // Если пиксель не полностью прозрачный
+                    uint32_t color = pixel & 0x00FFFFFF; // Получаем цвет без альфа-канала
+
+                    // Смешивание цветов
+                    if (final_alpha == 0) {
+                        final_pixel = pixel; // Если финальный пиксель еще не установлен
+                        final_alpha = alpha;
+                    } else {
+                        final_alpha = final_alpha + alpha * (255 - final_alpha) / 255; // Итоговый альфа
+                        final_pixel = ((final_pixel & 0x00FFFFFF) * final_alpha + (color * alpha * (255 - final_alpha) / 255)) / final_alpha;
+                    }
                 }
             }
-            draw_pixel(x, y, final_pixel);
+
+            // Устанавливаем финальный пиксель
+            draw_pixel(x, y, (final_alpha << 24) | final_pixel);
         }
     }
 }
-
 
 void layer_clear(uint8_t layer_index) {
     if (layer_index >= MAX_LAYERS) return;

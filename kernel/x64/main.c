@@ -48,7 +48,7 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
         fb_tag->framebuffer_bpp,
         fb_tag->framebuffer_pitch,
         (void*)(uintptr_t)fb_tag->framebuffer_addr
-    );    
+    );
     
     // Создаем 2 слоя
     layer_clear(0);
