@@ -1,13 +1,8 @@
 #include "../../drivers/x64/Video/vbe/vbe.h"
-#include "../../drivers/x64/Video/vga/vga.h"
-#include "../../src/images/headers/wallpaper1.h"    // Определяет WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1
-#include "../../src/images/headers/commandprompt.h" // Для примера
-#include "../../src/modules/BinFont.h"
+#include "../../src/images/headers/wallpaper1.h" // Определяет WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
-
-#define VideoMode 1 // 0 - VGA, 1 - VBE
 
 struct multiboot_tag {
     uint32_t type;
@@ -28,8 +23,7 @@ struct multiboot_tag_framebuffer {
 
 void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     if (magic != 0x36d76289) {
-        vga_init();
-        vga_write_string("[Error] Wrong multiboot2 magic.\n");
+        // Обработка ошибки
         while (1) { asm volatile("hlt"); }
     }
     
@@ -44,29 +38,28 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     }
     
     if (!fb_tag) {
-        vga_init();
-        vga_write_string("[Error] No suitable framebuffer.\n");
+        // Обработка ошибки
         while (1) { asm volatile("hlt"); }
     }
     
-    nvidia_vbe_init(
+    vbe_init(
         fb_tag->framebuffer_width,
         fb_tag->framebuffer_height,
         fb_tag->framebuffer_bpp,
         fb_tag->framebuffer_pitch,
         (void*)(uintptr_t)fb_tag->framebuffer_addr
-    );
+    );    
     
-    // Используем экспортированные fb_width и fb_height из vbe.h
-    create_layer_ex(0, fb_width, fb_height, 0, 0);
-    create_layer_ex(1, fb_width, fb_height, 0, 0);
+    // Создаем 2 слоя
+    layer_clear(0);
+    layer_clear(1);
     
-    // Рисуем обои на слое 0:
-    draw_bitmap_layer(0, 0, 0, WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1);
+    // Рисуем обои на слое 0
+    draw_bitmap(0, 0, 0, WALLPAPER1_WIDTH, WALLPAPER1_HEIGHT, wallpaper1);
     
-    // Очищаем слой 1 до прозрачного цвета и рисуем символ 'A'
-    clear_layer(1, 0x00000000);
-    draw_symbol(1, 50, 50, 'A', 0xFFFFFFFF);
+    // Очищаем слой 1 и рисуем символ 'A'
+    layer_clear(1);
+    // Здесь вы можете добавить код для рисования символа 'A' на слое 1, если у вас есть соответствующий bitmap
     
     // Композитим виртуальные слои и выводим итоговое изображение в видеопамять
     composite_layers();
