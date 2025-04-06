@@ -38,7 +38,7 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     }
     
     if (!fb_tag) {
-        // Обработка ошибки
+        // Обработка ошибки: тег фреймбуфера не найден
         while (1) { asm volatile("hlt"); }
     }
     
@@ -64,5 +64,8 @@ void kernel_main(uint32_t magic, void *mboot_info_ptr) {
     // Композитим виртуальные слои и выводим итоговое изображение в видеопамять
     composite_layers();
     
-    while (1) { asm volatile("hlt"); }
+    // Ожидание в бесконечном цикле
+    while (1) {
+        asm volatile("cli; hlt"); // Остановить прерывания и перейти в режим ожидания
+    }
 }

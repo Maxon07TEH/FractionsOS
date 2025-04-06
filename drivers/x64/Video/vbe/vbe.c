@@ -31,8 +31,8 @@ void vbe_init(uint32_t width, uint32_t height, uint8_t bpp, uint32_t fb_pitch, v
 
 void draw_pixel(uint32_t x, uint32_t y, uint32_t color) {
     if (x < fb_width && y < fb_height) {
-        uint32_t *pixel_ptr = (uint32_t *)((uint8_t *)framebuffer + y * pitch);
-        pixel_ptr[x] = color;
+        uint32_t *pixel_ptr = (uint32_t *)((uint8_t *)framebuffer + y * pitch + x * (fb_bpp / 8));
+        *pixel_ptr = color; // Устанавливаем цвет пикселя
     }
 }
 
