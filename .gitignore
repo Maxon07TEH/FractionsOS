@@ -38,3 +38,4 @@ qemu.log
 FractionsOS
 FractionsOS.*
 qemu.log
+*.xml
